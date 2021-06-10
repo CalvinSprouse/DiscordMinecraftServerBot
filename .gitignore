@@ -2,6 +2,7 @@
 # with user entered tags: python, venv, pycharm
 ### Programming ###
 /SavedServers/
+*.env
 
 ### PyCharm ###
 # Covers JetBrains IDEs: IntelliJ, RubyMine, PhpStorm, AppCode, PyCharm, CLion, Android Studio, WebStorm and Rider
