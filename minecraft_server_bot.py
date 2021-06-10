@@ -1,6 +1,6 @@
 from decouple import config
 from discord.ext import commands
-from py_minecraft_server import ServerMaker
+from py_minecraft_server import ServerMaker, ServerAlreadyExistsException
 import discord
 import logging
 import os
@@ -53,7 +53,7 @@ class MinecraftServerManager(commands.Cog):
                         logging.warning(f"Server {server_name} already exists for guild {self.get_guild_name(command.guild)}")
                 else:
                     logging.warning(f"Guild {self.get_guild_name(command.guild)} has reached maximum servers {self.max_allowable_servers}")
-            except AttributeError:
+            except ServerAlreadyExistsException:
                 logging.warning(f"Guild {self.get_guild_name(command.guild)} already has a server named {server_name}")
         except AssertionError:
             logging.info(f"Message '{command.message.content}' from {command.message.author} is not formatted properly")

@@ -1,5 +1,5 @@
 """
-Next step: make server runner
+Next step: make custom exceptions
 """
 from bs4 import BeautifulSoup
 from multiprocessing import Process, freeze_support
@@ -30,10 +30,17 @@ class cd:
 class VersionException(Exception):
     def __init__(self, entered_version=None):
         self.entered_version = entered_version
-        super().__init__()
 
     def get_user_input(self):
         return self.entered_version
+
+
+class ServerAlreadyExistsException(Exception):
+    def __init__(self, attempted_location=None):
+        self.attempted_location = attempted_location
+
+    def get_attempted_location(self):
+        return self.attempted_location
 
 
 class ServerLoader:
@@ -207,6 +214,8 @@ class ServerMaker:
             if not jar_version:
                 self.jar_version = self.get_current_minecraft_version()
             self.jar_name = f"minecraft_server.{self.jar_version}.jar"
+        else:
+            raise ServerAlreadyExistsException(server_location)
 
     def make_server(self):
         self.download_jar(self.server_location, self.jar_name, self.jar_version)
