@@ -30,16 +30,18 @@ class MinecraftServerManager(commands.Cog):
 
     @commands.command(aliases=["create", "create-server"])
     async def create_server(self, command):
-        logger.info(f"{command.message.author} is attempting to create minecraft server on guild {command.guild.name}")
+        logger.info(f"{command.message.author} is attempting to create a minecraft server on guild {command.guild.name}")
         logger.info(f"There are currently {self.get_server_count(command.guild)} servers for guild {command.guild.name}")
         try:
-            # parse the commands
-            args = command.message.content.split()
-            assert len(args) == 3 or len(args) == 2
-            server_name = args[1]
+            # parse the commands and validate
+            args = self.parse_command_args(command)
+            assert len(args) == 2 or len(args) == 1
+
+            server_name = args[0]
+
             jar_version = None
-            if len(args) == 3:
-                jar_version = args[2]
+            if len(args) == 2:
+                jar_version = args[1]
 
             # attempt to make the server
             try:
@@ -48,15 +50,22 @@ class MinecraftServerManager(commands.Cog):
                         with ServerMaker(server_location=os.path.join(self.get_guild_save_location(command.guild), server_name),
                                          jar_version=jar_version) as maker:
                             maker.make_server()
-                        logging.info(f"Server {server_name} created for guild {self.get_guild_name(command.guild)}")
+                        logger.info(f"Server {server_name} created for guild {self.get_guild_name(command.guild)}")
                     else:
-                        logging.warning(f"Server {server_name} already exists for guild {self.get_guild_name(command.guild)}")
+                        logger.warning(f"Server {server_name} already exists for guild {self.get_guild_name(command.guild)}")
                 else:
-                    logging.warning(f"Guild {self.get_guild_name(command.guild)} has reached maximum servers {self.max_allowable_servers}")
+                    logger.warning(f"Guild {self.get_guild_name(command.guild)} has reached maximum servers {self.max_allowable_servers}")
             except ServerAlreadyExistsException:
-                logging.warning(f"Guild {self.get_guild_name(command.guild)} already has a server named {server_name}")
+                logger.warning(f"Guild {self.get_guild_name(command.guild)} already has a server named {server_name}")
         except AssertionError:
-            logging.info(f"Message '{command.message.content}' from {command.message.author} is not formatted properly")
+            logger.info(f"Message '{command.message.content}' from {command.message.author} is not formatted properly")
+
+    @commands.command(aliases=["edit", "change", "edit-server"])
+    async def edit_server(self, command):
+        logger.info(self.parse_command_args(command), type(command))
+
+    def parse_command_args(self, command):
+        return command.message.content.strip().split()[1:]
 
     def get_server_count(self, guild: discord.Guild):
         return len(os.listdir(self.get_guild_save_location(guild)))
@@ -70,6 +79,12 @@ class MinecraftServerManager(commands.Cog):
 
 
 if __name__ == "__main__":
+    # configure logger
+    stream = logging.StreamHandler()
+    stream.setLevel(logging.INFO)
+    stream.setFormatter(logging.Formatter("%(asctime)s:%(levelname)s:%(message)s"))
+    logger.addHandler(stream)
+
     # configure client
     server_bot = commands.Bot(command_prefix="$")
     server_bot.add_cog(MinecraftServerManager(bot=server_bot))
