@@ -9,8 +9,6 @@ import keyring
 import logging
 import os
 
-# TODO: Run server
-
 # configure logger
 logger = logging.getLogger("discord")
 logger.setLevel(logging.INFO)
