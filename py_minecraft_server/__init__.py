@@ -57,9 +57,9 @@ class ServerLoader:
         assert os.path.exists(self.server_location)
 
         # sets the memory allocation to no more than 3/4 the available ram UNLESS the user passes _override=True
-        self.mem_allocation = mem_allocation
+        self.mem_allocation = int(mem_allocation)
         if not _override:
-            self.mem_allocation = min(mem_allocation, self.get_max_mem_allocation())
+            self.mem_allocation = min(self.mem_allocation, self.get_max_mem_allocation())
 
         # automatically preform a server properties load
         self.server_process = None
