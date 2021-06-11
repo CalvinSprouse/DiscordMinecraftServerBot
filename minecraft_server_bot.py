@@ -1,6 +1,7 @@
 import shutil
 
 from discord.ext import commands
+from multiprocessing import freeze_support
 from py_minecraft_server import ServerMaker, ServerLoader, ServerAlreadyExistsException
 import argparse
 import coloredlogs
@@ -106,7 +107,7 @@ class MinecraftServerManager(commands.Cog):
             with ServerLoader(os.path.join(self.get_guild_save_location(command.guild), args[0]), args[1]) as server:
                 server.start_server()
                 self.loaded_servers[self.get_guild_name(command.guild)] = server
-            await self.send_message(f"Server {server} running"
+            await self.send_message(f"Server {server} running "
                                     f"on ip {self.loaded_servers[self.get_guild_name(command.guild)].get_external_ip()}",
                                     command)
         except AssertionError:
@@ -148,6 +149,9 @@ class MinecraftServerManager(commands.Cog):
 
 
 if __name__ == "__main__":
+    # needed for windows deployment
+    freeze_support()
+    
     # configure logger
     stream = logging.StreamHandler()
     stream.setLevel(logging.INFO)

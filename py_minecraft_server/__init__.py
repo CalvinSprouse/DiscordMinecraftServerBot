@@ -104,7 +104,7 @@ class ServerLoader:
 
     def run_server(self):
         with cd(self.server_location):
-            os.system(f"java -Xms{int(self.mem_allocation)}G -Xmx{int(self.mem_allocation)}G -jar minecraft_server.{self.get_current_version()}.jar")
+            os.system(f"java -Xms{int(self.mem_allocation)}G -Xmx{int(self.mem_allocation)}G -jar minecraft_server.{self.get_current_version()}.jar nogui")
         self.stop_server()
 
     def stop_server(self):
