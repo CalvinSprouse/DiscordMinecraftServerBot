@@ -1,9 +1,8 @@
-import shutil
-
+from py_minecraft_server.async_server import *
 from discord.ext import commands
 from multiprocessing import freeze_support
-from py_minecraft_server import ServerMaker, ServerLoader, ServerAlreadyExistsException
 import argparse
+import asyncio
 import coloredlogs
 import discord
 import keyring
@@ -11,176 +10,159 @@ import logging
 import os
 
 # configure logger
-logger = logging.getLogger("discord")
-logger.setLevel(logging.INFO)
 coloredlogs.install(level=logging.DEBUG)
-file_handler = logging.FileHandler(filename="minecraft_server_bot.log", encoding="utf-8", mode="w")
-file_handler.setFormatter(logging.Formatter("%(asctime)s:%(levelname)s:%(name)s: %(message)s"))
-logger.addHandler(file_handler)
+logger = logging.getLogger("discord")
+
+
+def str_to_key(string: str):
+    return string.strip().lower().replace(" ", "_")
 
 
 class MinecraftServerManager(commands.Cog):
-    def __init__(self, bot: commands.Bot, max_allowable_servers=5, server_save_location="SavedServers"):
+    def __init__(self, bot: commands.Bot, max_allowable_servers: int = 5, server_save_location: str = "SavedServers"):
+        # global variables
         self.bot = bot
         self.max_allowable_servers = max_allowable_servers
-        self.loaded_servers = {}
         self.server_save_location = os.path.abspath(server_save_location)
+
+        # guild specific variables
+        self.g_server_loader = {}
+        self.g_server_maker = {}
+        self.g_user_server_starter = {}
 
     @commands.Cog.listener()
     async def on_ready(self):
         logger.info(f"Bot ready {self.bot.user.name}")
+        # define guild specific variables
         for guild in self.bot.guilds:
-            self.loaded_servers[self.get_guild_name(guild)] = None
-        await self.bot.change_presence(activity=discord.Game(
-            name='Undress me at https://github.com/CalvinSprouse/'))
+            guild_save_location = os.path.join(self.server_save_location, str_to_key(guild.name))
+            self.g_server_maker[str(guild.id)] = ServerMaker(guild_save_location, self.max_allowable_servers)
+            self.g_server_loader[str(guild.id)] = ServerLoader(guild_save_location)
+        # set status
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        # logger.info(f"Message from {message.author}: {message.content}")
-        pass
-
-    @commands.command()
-    async def send_message(self, message: str, original_message: discord.Message):
-        if not original_message.author.bot:
-            await original_message.channel.send(message)
-
-    @commands.command(aliases=["create", "create-server", "make"])
-    async def create_server(self, command):
         logger.info(
-            f"{command.message.author} is attempting to create a minecraft server on guild {command.guild.name}")
-        logger.info(
-            f"There are currently {self.get_server_count(command.guild)} servers for guild {command.guild.name}")
+            f"{message.author.name} calling '{message.content}' "
+            f"from {message.guild.name} channel {message.channel}")
+
+    @commands.command(aliases=["create", "create-server"])
+    @commands.guild_only()
+    async def create_server(self, ctx, server_name: str, version: str):
         try:
-            # parse the commands and validate
-            args = self.parse_command_args(command)
-            assert len(args) == 2 or len(args) == 1
+            async with ctx.channel.typing():
+                # parse args
 
-            server_name = args[0]
+                if not version:
+                    version = await ServerMaker.get_current_minecraft_version()
 
-            jar_version = None
-            if len(args) == 2:
-                jar_version = args[1]
+                # make server
+                try:
+                    await self.g_server_maker[str(ctx.guild.id)].make_server(server_name=server_name,
+                                                                             server_version=version,
+                                                                             overwrite=True)
+                except ExceedMaxServerCountException:
+                    await self.send_guild_text_message(f"This server has exceeded the maximum number of servers "
+                                                       f"({self.g_server_maker[str(ctx.guild.id)].max_servers}).",
+                                                       ctx.channel)
+                except ServerNameTakenException:
+                    # TODO: Add user query to overwrite, call separate delete function, recall this function
+                    await self.send_guild_text_message(f"This name ({server_name}) is already taken.", ctx.guild)
 
-            # attempt to make the server
-            try:
-                if self.get_server_count(command.guild) < self.max_allowable_servers:
-                    if not os.path.exists(os.path.join(self.get_guild_name(command.guild), server_name)):
-                        try:
-                            with ServerMaker(
-                                    server_location=os.path.join(self.get_guild_save_location(command.guild), server_name),
-                                    jar_version=jar_version) as maker:
-                                maker.make_server()
-                            logger.info(f"Server {server_name} created for guild {self.get_guild_name(command.guild)}")
-                            await self.send_message(f"Server {server_name} created.", command)
-                        except FileNotFoundError as e:
-                            if "eula.txt" in e.filename:
-                                logging.critical("Java version out of date please update Java")
-                            shutil.rmtree(os.path.abspath(os.path.join(self.get_guild_save_location(command.guild), server_name)))
-                    else:
-                        logger.warning(
-                            f"Server {server_name} already exists for guild {self.get_guild_name(command.guild)}")
-                else:
-                    logger.warning(
-                        f"Guild {self.get_guild_name(command.guild)} has reached maximum servers {self.max_allowable_servers}")
-            except ServerAlreadyExistsException:
-                logger.warning(f"Guild {self.get_guild_name(command.guild)} already has a server named {server_name}")
+                await self.send_guild_text_message(
+                    f"Created server {self.g_server_maker[str(ctx.guild.id)].get_number_of_servers()}"
+                    f"/{self.g_server_maker[str(ctx.guild.id)].max_servers} "
+                    f"{server_name} running on v{version}", ctx.channel)
         except AssertionError:
-            logger.info(f"Message '{command.message.content}' from {command.message.author} is not formatted properly")
+            await ctx.send_help()
 
-    @commands.command(aliases=["edit", "change", "edit-server"])
-    async def edit_server(self, command):
-        args = list(reversed(self.parse_command_args(command)))
-        server = args.pop()
+    @commands.command(aliases=["list", "list-servers"])
+    @commands.guild_only()
+    async def list_servers(self, ctx):
+        server_string = "\n".join([f"{num + 1}. {server}" for num, server in enumerate(
+            os.listdir(os.path.join(self.server_save_location, str_to_key(ctx.guild.name))))])
+        await self.send_guild_text_message(
+            f"{ctx.guild.name} Servers:\n{server_string}\nOf {self.g_server_maker[str(ctx.guild.id)].max_servers}",
+            ctx.channel)
+
+    @commands.command(aliases=["run", "launch", "start", "run-server", "start-server",
+                               "launch-server", "run_server", "launch_server"])
+    @commands.guild_only()
+    async def start_server(self, ctx, server_name: str, mem_allocation: int):
         try:
-            with ServerLoader(os.path.join(self.get_guild_save_location(command.guild), server), 1) as editor:
-                for arg in args:
-                    logger.info(f"{command.guild.name}: {server}: {arg.split('=')[0]}={arg.split('=')[1]}")
-                    editor.change_property(arg.split("=")[0], arg.split("=")[1])
+            async with ctx.channel.typing():
+                assert server_name and mem_allocation
+                # start server
+                await self.g_server_loader[str(ctx.guild.id)].load_server(server_name)
+                self.g_server_loader[str(ctx.guild.id)].start_server(mem_allocation, gui=ctx.author.id == 390731132796272651)
+                # save details to ensure only the starter can stop the server
+                self.g_user_server_starter[str(ctx.guild.id)] = {}
+                self.g_user_server_starter[str(ctx.guild.id)]["user_id"] = ctx.message.author.id
+                self.g_user_server_starter[str(ctx.guild.id)]["secret"] = ctx.message.id
+                # notify the channel the server now exits
+                await self.send_guild_text_message(
+                    f"Server {server_name} started on {self.g_server_loader[str(ctx.guild.id)].get_ip()}",
+                    ctx.channel)
         except AssertionError:
-            logger.warning(f"Server {server} does not exist in guild {command.guild.name}")
+            ctx.send_help()
 
-    @commands.command(aliases=["run", "start", "start_server", "run-server", "start-server", "host"])
-    async def run_server(self, command):
-        args = self.parse_command_args(command)
-        server = args[0]
-        try:
-            with ServerLoader(os.path.join(self.get_guild_save_location(command.guild), args[0]), args[1]) as server:
-                server.start_server()
-                self.loaded_servers[self.get_guild_name(command.guild)] = server
-            await self.send_message(f"Server {server} running "
-                                    f"on ip {self.loaded_servers[self.get_guild_name(command.guild)].get_external_ip()}",
-                                    command)
-        except AssertionError:
-            logger.warning(f"Server {server} does not exist in guild {command.guild.name}")
-        except IndexError:
-            logger.warning(f"run_server [server] [mem_allocation in GB] command requires two inputs")
+    @commands.command(aliases=["stop", "stop-server"])
+    @commands.guild_only()
+    async def stop_server(self, ctx, secret: str = None):
+        if self.g_server_loader[str(ctx.guild.id)].is_running():
+            if self.g_user_server_starter[str(ctx.guild.id)]["secret"] == secret or \
+                    self.g_user_server_starter[str(ctx.guild.id)]["user_id"] == ctx.message.author.id:
+                self.g_server_loader[str(ctx.guild.id)].stop_server()
+                await self.send_guild_text_message(f"Server stopped.", ctx.channel)
+        else:
+            await self.send_guild_text_message(f"No server running from this guild.", ctx.channel)
+
+    @commands.command(aliases=["set", "change"])
+    @commands.guild_only()
+    async def set_property(self, ctx, server: str, key: str, val: str):
+        if not self.g_server_loader[str(ctx.guild.id)].is_running():
+            with self.g_server_loader[str(ctx.guild.id)] as loader:
+                await loader.load_server(server)
+                await loader.set_property(key, val)
+        else:
+            await self.send_guild_text_message("Cannot edit while a server is running", ctx.channel)
+
+    @commands.command(aliases=["command", "server-command"])
+    @commands.guild_only()
+    async def server_command(self, ctx, *command_args):
+        if self.g_server_loader[str(ctx.guild.id)].is_running():
+            await self.g_server_loader[str(ctx.guild.id)].server_command(" ".join(command_args))
+        else:
+            await self.send_guild_text_message("No server running to send command to", ctx.channel)
 
     @commands.command(aliases=["status", "server-status"])
-    async def server_status(self, command):
-        try:
-            loaded_server = self.loaded_servers[self.get_guild_name(command.guild)]
-            if loaded_server.is_running():
-                await self.send_message(f"Server {loaded_server.get_server_name()} is running. "
-                                        f"On IP {loaded_server.get_external_ip()}", command)
-        except AttributeError:
-            await self.send_message("No server running.", command)
+    @commands.guild_only()
+    async def server_status(self, ctx):
+        if self.g_server_loader[str(ctx.guild.id)].is_running():
+            await self.send_guild_text_message(f"{self.g_server_loader[str(ctx.guild.id)].server} running on "
+                                               f"{self.g_server_loader[str(ctx.guild.id)].get_ip()}", ctx.channel)
+        else:
+            await self.send_guild_text_message(f"No server running", ctx.channel)
 
-    @commands.command(aliases=["list", "servers"])
-    async def list_servers(self, command):
-        try:
-            await self.send_message(", ".join(os.listdir(self.get_guild_save_location(command.guild))), command)
-        except discord.errors.HTTPException:
-            await self.send_message("No servers", command)
-
-    def get_server_count(self, guild: discord.Guild):
-        return len(os.listdir(self.get_guild_save_location(guild)))
-
-    def get_guild_save_location(self, guild: discord.Guild):
-        os.makedirs(os.path.join(self.server_save_location, self.get_guild_name(guild)), exist_ok=True)
-        return os.path.join(self.server_save_location, self.get_guild_name(guild))
-
-    @staticmethod
-    def parse_command_args(command):
-        return command.message.content.strip().split()[1:]
-
-    @staticmethod
-    def get_guild_name(guild: discord.Guild):
-        return guild.name.lower().replace(" ", "_")
+    async def send_guild_text_message(self, message: str, channel: discord.TextChannel):
+        logger.debug(f"Sending message '{message}' to {channel}")
+        await channel.send(message)
 
 
+# TODO: Add proper improper arg handling (give everything a default value and handle the errors inside the func)
 if __name__ == "__main__":
-    # needed for windows deployment
+    # needed for windows
     freeze_support()
-    
-    # configure logger
-    stream = logging.StreamHandler()
-    stream.setLevel(logging.INFO)
-    stream.setFormatter(logging.Formatter("%(asctime)s:%(levelname)s:%(name)s: %(message)s"))
-    logger.addHandler(stream)
 
-    # configure argument parser
-    parser = argparse.ArgumentParser(description="Discord but that also runs minecraft servers")
-    parser.add_argument("-t", "--token", help="Provide the bot token")
-    parser.add_argument("-s", "--save-location", help="Provide the server save location as an absolute path")
-    parser.add_argument("-n", "--max-servers", help="How many servers can each guild save", type=int)
-    args = vars(parser.parse_args())
-
+    # configure argument parsing
+    # TODO: Parsing for tokens/settings and initial configuration
     service_name = os.path.basename(__file__)
-    if args["token"]:
-        keyring.set_password(service_name, "token", args["token"])
-    if args["save_location"]:
-        keyring.set_password(service_name, "save_location", args["save_location"])
-    if args["max_servers"]:
-        keyring.set_password(service_name, "max_servers", args["max_servers"])
 
     # configure client
     server_bot = commands.Bot(command_prefix="$")
-    try:
-        server_bot.add_cog(
-            MinecraftServerManager(bot=server_bot,
-                                   max_allowable_servers=int(keyring.get_password(service_name, "max_servers")),
-                                   server_save_location=keyring.get_password(service_name, "save_location")))
-        server_bot.run(keyring.get_password(service_name, "token"))
-    except (TypeError, AttributeError):
-        logging.critical("Please run first time configuration with 'minecraft_server_bot.exe"
-                         "-t [discord_bot_token] -s [server_save_location] -n [max_number_of_servers]'")
+    server_bot.add_cog(MinecraftServerManager(
+        bot=server_bot,
+        max_allowable_servers=5,
+        server_save_location="SavedServers"
+    ))
+    server_bot.run(keyring.get_password(service_name, "token"))

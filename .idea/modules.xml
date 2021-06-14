@@ -3,7 +3,6 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/DiscordMinecraftServerBot.iml" filepath="$PROJECT_DIR$/.idea/DiscordMinecraftServerBot.iml" />
-      <module fileurl="file://$PROJECT_DIR$/../PyMinecraftServer/.idea/PyMinecraftServer.iml" filepath="$PROJECT_DIR$/../PyMinecraftServer/.idea/PyMinecraftServer.iml" />
     </modules>
   </component>
 </project>
