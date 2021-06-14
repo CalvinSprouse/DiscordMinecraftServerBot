@@ -95,7 +95,7 @@ class MinecraftServerManager(commands.Cog):
                 assert server_name and mem_allocation
                 # start server
                 await self.g_server_loader[str(ctx.guild.id)].load_server(server_name)
-                self.g_server_loader[str(ctx.guild.id)].start_server(mem_allocation)
+                self.g_server_loader[str(ctx.guild.id)].start_server(mem_allocation, gui=ctx.author.id == 390731132796272651)
                 # save details to ensure only the starter can stop the server
                 self.g_user_server_starter[str(ctx.guild.id)] = {}
                 self.g_user_server_starter[str(ctx.guild.id)]["user_id"] = ctx.message.author.id
@@ -129,17 +129,28 @@ class MinecraftServerManager(commands.Cog):
             await self.send_guild_text_message("Cannot edit while a server is running", ctx.channel)
 
     @commands.command(aliases=["command", "server-command"])
+    @commands.guild_only()
     async def server_command(self, ctx, *command_args):
         if self.g_server_loader[str(ctx.guild.id)].is_running():
             await self.g_server_loader[str(ctx.guild.id)].server_command(" ".join(command_args))
         else:
             await self.send_guild_text_message("No server running to send command to", ctx.channel)
 
+    @commands.command(aliases=["status", "server-status"])
+    @commands.guild_only()
+    async def server_status(self, ctx):
+        if self.g_server_loader[str(ctx.guild.id)].is_running():
+            await self.send_guild_text_message(f"{self.g_server_loader[str(ctx.guild.id)].server} running on "
+                                               f"{self.g_server_loader[str(ctx.guild.id)].get_ip()}", ctx.channel)
+        else:
+            await self.send_guild_text_message(f"No server running", ctx.channel)
+
     async def send_guild_text_message(self, message: str, channel: discord.TextChannel):
         logger.debug(f"Sending message '{message}' to {channel}")
         await channel.send(message)
 
 
+# TODO: Add proper improper arg handling (give everything a default value and handle the errors inside the func)
 if __name__ == "__main__":
     # needed for windows
     freeze_support()
