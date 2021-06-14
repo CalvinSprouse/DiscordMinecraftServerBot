@@ -4,6 +4,7 @@
 /SavedServers/
 /py_minecraft_server/
 *.env
+build.bat
 
 ### PyCharm ###
 # Covers JetBrains IDEs: IntelliJ, RubyMine, PhpStorm, AppCode, PyCharm, CLion, Android Studio, WebStorm and Rider
