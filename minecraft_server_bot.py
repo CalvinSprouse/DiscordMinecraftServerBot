@@ -33,12 +33,15 @@ class MinecraftServerManager(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         logger.info(f"Bot ready {self.bot.user.name}")
+
         # define guild specific variables
         for guild in self.bot.guilds:
             guild_save_location = os.path.join(self.server_save_location, str_to_key(guild.name))
             self.g_server_maker[str(guild.id)] = ServerMaker(guild_save_location, self.max_allowable_servers)
             self.g_server_loader[str(guild.id)] = ServerLoader(guild_save_location)
-        # set status
+            self.g_user_server_starter[str(guild.id)] = {}
+
+        # TODO: Configure status setter and find useful things to do with it
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -51,12 +54,9 @@ class MinecraftServerManager(commands.Cog):
     async def create_server(self, ctx, server_name: str, version: str):
         try:
             async with ctx.channel.typing():
-                # parse args
-
                 if not version:
                     version = await ServerMaker.get_current_minecraft_version()
 
-                # make server
                 try:
                     await self.g_server_maker[str(ctx.guild.id)].make_server(server_name=server_name,
                                                                              server_version=version,
@@ -92,13 +92,17 @@ class MinecraftServerManager(commands.Cog):
         try:
             async with ctx.channel.typing():
                 assert server_name and mem_allocation
-                # start server
                 await self.g_server_loader[str(ctx.guild.id)].load_server(server_name)
-                self.g_server_loader[str(ctx.guild.id)].start_server(mem_allocation, gui=ctx.author.id == 390731132796272651)
+                self.g_server_loader[str(ctx.guild.id)].start_server(mem_allocation,
+                                                                     gui=ctx.author.id == 390731132796272651)
+                # enables the GUI for me
+
+                # TODO: Find better way to either use roles or user verification for running server
                 # save details to ensure only the starter can stop the server
                 self.g_user_server_starter[str(ctx.guild.id)] = {}
                 self.g_user_server_starter[str(ctx.guild.id)]["user_id"] = ctx.message.author.id
                 self.g_user_server_starter[str(ctx.guild.id)]["secret"] = ctx.message.id
+
                 # notify the channel the server now exits
                 await self.send_guild_text_message(
                     f"Server {server_name} started on {self.g_server_loader[str(ctx.guild.id)].get_ip()}",
@@ -150,6 +154,7 @@ class MinecraftServerManager(commands.Cog):
 
 
 # TODO: Add proper improper arg handling (give everything a default value and handle the errors inside the func)
+# TODO: Add documentation and create readme examples
 if __name__ == "__main__":
     # needed for windows
     freeze_support()
