@@ -9,8 +9,6 @@ import discord
 import keyring
 import logging
 import os
-import shutil
-import sys
 
 # configure logger
 coloredlogs.install(level=logging.DEBUG)
@@ -120,8 +118,6 @@ class MinecraftServerManager(commands.Cog):
             if self.g_user_server_starter[str(ctx.guild.id)]["secret"] == secret or \
                     self.g_user_server_starter[str(ctx.guild.id)]["user_id"] == ctx.message.author.id:
                 self.g_server_loader[str(ctx.guild.id)].stop_server()
-                await asyncio.sleep(5)
-                # TODO: Create some method of communication to pass the ACTUAL stop command
                 await self.send_guild_text_message(f"Server stopped.", ctx.channel)
         else:
             await self.send_guild_text_message(f"No server running from this guild.", ctx.channel)
