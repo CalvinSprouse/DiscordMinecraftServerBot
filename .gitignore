@@ -2,6 +2,7 @@
 # with user entered tags: python, venv, pycharm
 ### Programming ###
 /SavedServers/
+/py_minecraft_server/
 *.env
 
 ### PyCharm ###
