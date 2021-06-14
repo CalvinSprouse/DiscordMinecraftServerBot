@@ -1,5 +1,4 @@
-import async_minecraft_server
-from async_minecraft_server import ServerLoader, ServerMaker
+from py_minecraft_server.async_server import *
 from discord.ext import commands
 from multiprocessing import freeze_support
 import argparse
@@ -62,11 +61,11 @@ class MinecraftServerManager(commands.Cog):
                     await self.g_server_maker[str(ctx.guild.id)].make_server(server_name=server_name,
                                                                              server_version=version,
                                                                              overwrite=True)
-                except async_minecraft_server.ExceedMaxServerCountException:
+                except ExceedMaxServerCountException:
                     await self.send_guild_text_message(f"This server has exceeded the maximum number of servers "
                                                        f"({self.g_server_maker[str(ctx.guild.id)].max_servers}).",
                                                        ctx.channel)
-                except async_minecraft_server.ServerNameTakenException:
+                except ServerNameTakenException:
                     # TODO: Add user query to overwrite, call separate delete function, recall this function
                     await self.send_guild_text_message(f"This name ({server_name}) is already taken.", ctx.guild)
 
