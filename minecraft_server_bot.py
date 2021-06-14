@@ -42,14 +42,14 @@ class MinecraftServerManager(commands.Cog):
         # set status
 
     @commands.Cog.listener()
-    async def on_message(self, ctx):
-        pass
+    async def on_message(self, message):
+        logger.info(
+            f"{message.author.name} calling '{message.content}' "
+            f"from {message.guild.name} channel {message.channel}")
 
     @commands.command(aliases=["create", "create-server"])
     @commands.guild_only()
     async def create_server(self, ctx, server_name: str, version: str):
-        logger.info(
-            f"{ctx.message.author} calling create_server '{ctx.message}' from guild {ctx.guild} channel {ctx.channel}")
         try:
             async with ctx.channel.typing():
                 # parse args
@@ -90,8 +90,6 @@ class MinecraftServerManager(commands.Cog):
                                "launch-server", "run_server", "launch_server"])
     @commands.guild_only()
     async def start_server(self, ctx, server_name: str, mem_allocation: int):
-        logger.info(
-            f"{ctx.message.author} calling start_server '{ctx.message}' from {ctx.guild.name} channel {ctx.channel}")
         try:
             async with ctx.channel.typing():
                 assert server_name and mem_allocation
@@ -112,8 +110,6 @@ class MinecraftServerManager(commands.Cog):
     @commands.command(aliases=["stop", "stop-server"])
     @commands.guild_only()
     async def stop_server(self, ctx, secret: str = None):
-        logger.info(
-            f"{ctx.message.author} calling stop_server '{ctx.message}' from {ctx.guild.name} channel {ctx.channel}")
         if self.g_server_loader[str(ctx.guild.id)].is_running():
             if self.g_user_server_starter[str(ctx.guild.id)]["secret"] == secret or \
                     self.g_user_server_starter[str(ctx.guild.id)]["user_id"] == ctx.message.author.id:
@@ -121,6 +117,23 @@ class MinecraftServerManager(commands.Cog):
                 await self.send_guild_text_message(f"Server stopped.", ctx.channel)
         else:
             await self.send_guild_text_message(f"No server running from this guild.", ctx.channel)
+
+    @commands.command(aliases=["set", "change"])
+    @commands.guild_only()
+    async def set_property(self, ctx, server: str, key: str, val: str):
+        if not self.g_server_loader[str(ctx.guild.id)].is_running():
+            with self.g_server_loader[str(ctx.guild.id)] as loader:
+                await loader.load_server(server)
+                await loader.set_property(key, val)
+        else:
+            await self.send_guild_text_message("Cannot edit while a server is running", ctx.channel)
+
+    @commands.command(aliases=["command", "server-command"])
+    async def server_command(self, ctx, *command_args):
+        if self.g_server_loader[str(ctx.guild.id)].is_running():
+            await self.g_server_loader[str(ctx.guild.id)].server_command(" ".join(command_args))
+        else:
+            await self.send_guild_text_message("No server running to send command to", ctx.channel)
 
     async def send_guild_text_message(self, message: str, channel: discord.TextChannel):
         logger.debug(f"Sending message '{message}' to {channel}")
@@ -132,6 +145,7 @@ if __name__ == "__main__":
     freeze_support()
 
     # configure argument parsing
+    # TODO: Parsing for tokens/settings and initial configuration
     service_name = os.path.basename(__file__)
 
     # configure client

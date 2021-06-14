@@ -217,7 +217,7 @@ class ServerLoader:
         self.server_process = subprocess.Popen(
             f"java -Xms{self.mem_allocation}G -Xmx{self.mem_allocation}G "
             f"-jar {get_jar_name(self.get_current_version())} {gui_str}",
-            cwd=self.server_location, stdout=stdout, stdin=subprocess.PIPE)
+            cwd=self.server_location, stdout=subprocess.PIPE, stdin=subprocess.PIPE)
         logger.debug(f"Server {self.server} started with {mem_allocation}GB on {self.get_ip()}")
 
     def stop_server(self):
@@ -237,6 +237,16 @@ class ServerLoader:
     def get_process(self):
         """Returns a reference to self.server_process"""
         return self.server_process
+
+    async def server_command(self, command: str):
+        """Writes a command into the server"""
+        if self.is_running():
+            command = bytes(command.strip().encode("unicode-escape").decode() + "\n", "utf8")
+            logger.debug(f"Running command to {self.server} {command}")
+            # TODO: Capture output and return it and remove the empty wait
+            self.get_process().stdin.write(command)
+            self.get_process().stdin.flush()
+            await asyncio.sleep(5)
 
     def set_mem_allocation(self, mem_allocation: int):
         """Sets the mem_allocation and ensures it's no more than 50% available RAM"""
@@ -266,7 +276,8 @@ class ServerLoader:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        pass
+        if self.is_running():
+            self.stop_server()
 
     def __repr__(self):
         return f"Server {self.server} version {self.get_current_version()} running? {self.is_running()}"
@@ -289,3 +300,18 @@ class ServerLoader:
     @staticmethod
     def get_ip():
         return ServerLoader.get_local_ip(), ServerLoader.get_external_ip()
+
+
+if __name__ == "__main__":
+    import asyncio
+
+
+    async def main():
+        with ServerLoader("training") as loader:
+            await loader.load_server("Test")
+            loader.start_server(2, gui=True)
+            await asyncio.sleep(15)
+            await loader.server_command("help")
+
+
+    asyncio.run(main())
